@@ -1,6 +1,7 @@
 require("dotenv").config();
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
+import { getDefMsg } from "./defaultObjects";
 import {
   joinRoom,
   createRoom,
@@ -8,9 +9,15 @@ import {
   sendInvitation,
   activeUser,
   deActiveUser,
+  acceptInvitation,
+  deleteNotification,
+  joinPublic,
+  publicList,
 } from "./functions";
 import {
+  Channel,
   CreateRoom,
+  JoinPublic,
   Message,
   User,
   UserInvitation,
@@ -32,10 +39,11 @@ io.on("connection", (socket: Socket) => {
   console.log(socket.id);
   socket.on("activeUser", (user: User, callback) => {
     activeUser(user)
-      .then((res) => {
+      .then((res: any) => {
+        res.channels.forEach((channel) => socket.join(channel.id));
         callback({
           type: "success",
-          message: "Room successfully created!",
+          message: "User data successfully fetched!",
           data: res,
         });
       })
@@ -48,7 +56,7 @@ io.on("connection", (socket: Socket) => {
   });
   socket.on("disconnect", () => deActiveUser(socket.id));
 
-  socket.on("joinRoom", (user, roomId) => {
+  socket.on("joinRoom", (user: User, roomId: string) => {
     try {
       const users = joinRoom(user, roomId);
       socket.join(roomId);
@@ -89,15 +97,9 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("sendMessage", (data: Message, callback) => {
-    console.log(data.msg);
     try {
       const msg = sendMessage(data);
-      socket.broadcast.to(msg.channel.id).emit("message", msg);
-      callback({
-        type: "success",
-        message: "Message successfully sent!",
-        data: msg,
-      });
+      io.in(msg.channel.id).emit("message", msg);
     } catch (error) {
       callback({
         type: "error",
@@ -123,6 +125,62 @@ io.on("connection", (socket: Socket) => {
           message: error,
         })
       );
+  });
+
+  socket.on("acceptInvitation", (data: UserNotification, callback) => {
+    acceptInvitation(socket.id, data)
+      .then((res: any) => {
+        if (res.channel) {
+          socket.join(res.channel.id);
+          socket.to(res.channel.id).emit("message", res.message);
+          socket.emit("joinChannel", res.channel);
+          callback({
+            type: "success",
+            message: "Invite successfully accepted!",
+            data: res.channel,
+          });
+        }
+      })
+      .catch((error) =>
+        callback({
+          type: "error",
+          message: error,
+        })
+      );
+  });
+
+  socket.on("joinPublic", (data: JoinPublic, callback) => {
+    try {
+      const { room, m1, m2 } = joinPublic(data.user, data.category);
+      socket.join(room.id);
+      callback({
+        type: "success",
+        message: "Successfully joined!",
+        data: room,
+      });
+      socket.emit("message", m1);
+      socket.broadcast.to(room.id).emit("message", m2);
+      io.to(room.id).emit("userList", { users: room.users });
+    } catch (error) {
+      callback({
+        type: "error",
+        message: error,
+      });
+    }
+  });
+
+  socket.on("deleteNotification", (user: User, data: UserNotification) => {
+    deleteNotification(user, data).catch((error) => {
+      console.log(error);
+    });
+  });
+
+  socket.on("publicList", (callback) => {
+    callback({
+      type: "success",
+      message: "List of public channels successfully fetched!",
+      data: publicList(),
+    });
   });
 });
 

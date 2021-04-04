@@ -1,3 +1,4 @@
+import categories from "./categories";
 import { v4 } from "uuid";
 import {
   Channel,
@@ -6,26 +7,29 @@ import {
   CreateRoom,
   UserInvitation,
   UserNotification,
+  FirebaseNotification,
 } from "./types";
 import { firestore, admin } from "./firebase";
+import { getDefMsg, getDefRoom } from "./defaultObjects";
 
 const rooms: Channel[] = [];
+const publicRooms: Channel[] = [];
 const activeUsers: User[] = [];
 
-const DEFAULT_ROOM_SIZE = 20;
-
 const init = () => {
+  categories.forEach((cat: string) => {
+    publicRooms.push(getDefRoom(cat, cat, "public"));
+  });
   firestore
     .collection("channels")
     .get()
     .then((res) => {
       res.forEach((channel) => {
-        const ch = channel.data().room;
+        const ch = channel.data() as Channel;
         if (ch) rooms.push(ch);
       });
     });
 };
-
 init();
 
 export const joinRoom = (user: User, roomId: string) => {
@@ -35,6 +39,18 @@ export const joinRoom = (user: User, roomId: string) => {
     room.users.push(user);
     return room.users;
   } else throw new Error("Invalid room ID.");
+};
+
+export const joinPublic = (u: User, category: string) => {
+  const room = publicRooms.find((room) => room.category === category);
+  if (room) {
+    room.users.push(u);
+    const active = activeUsers.find((u) => u.id === u.id);
+    active.publicChannels.push(room.id);
+    const m1 = getDefMsg(u, `${u.name}, welcome the room!`, room, true);
+    const m2 = getDefMsg(u, `${u.name} has joined the room!`, room, true);
+    return { room, m1, m2 };
+  } else throw new Error("Invalid category.");
 };
 
 export const createRoom = async (data: CreateRoom) => {
@@ -48,32 +64,20 @@ export const createRoom = async (data: CreateRoom) => {
     else if (data.category.length > 32)
       reject("Category can't be longer than 32 characters.");
 
-    const id = v4();
-    const room: Channel = {
-      id,
-      name: data.name,
-      category: data.category,
-      size: DEFAULT_ROOM_SIZE,
-      users: [data.user],
-      messages: [],
-      type: "private",
-      avatar:
-        "https://www.unfe.org/wp-content/uploads/2019/04/SM-placeholder-1024x512.png",
-    };
-    const msg: Message = {
-      id: v4(),
-      author: data.user,
-      date: new Date(Date.now()),
-      msg: `${data.user.name}, welcome to the room ${data.name}!`,
-      channel: room,
-    };
+    const room = getDefRoom(data.name, data.category, "private");
+    room.users.push(data.user);
+    const msg = getDefMsg(
+      data.user,
+      `${data.user.name}, welcome to the room ${data.name}!`,
+      room,
+      true
+    );
 
-    const r = firestore
+    firestore
       .collection("channels")
       .doc(room.id)
-      .set({ room })
+      .set(room)
       .then(() => {
-        console.log(data.user.name);
         firestore
           .collection("users")
           .doc(data.user.name)
@@ -86,24 +90,22 @@ export const createRoom = async (data: CreateRoom) => {
         resolve({ room, msg });
       })
       .catch((err) => {
-        console.log(err);
         reject("Couldn't connect to the databse.");
       });
   });
 };
 
 export const sendMessage = (data: Message) => {
-  const message: Message = {
-    id: v4(),
-    author: data.author,
-    date: new Date(Date.now()),
-    msg: data.msg,
-    channel: data.channel,
-  };
+  const msg = getDefMsg(data.author, data.msg, data.channel, false);
   const room = rooms.find((r) => r.id === data.channel.id);
-  if (!room) throw new Error("There is no room with this id.");
-  room.messages.push(message);
-  return message;
+  if (!room) {
+    const pRoom = publicRooms.find((r) => r.id === data.channel.id);
+    if (!pRoom) throw new Error("There is no room with this id.");
+    pRoom.messages.push(msg);
+    return msg;
+  }
+  room.messages.push(msg);
+  return msg;
 };
 
 export const sendInvitation = async (data: UserInvitation) => {
@@ -114,6 +116,8 @@ export const sendInvitation = async (data: UserInvitation) => {
       .get()
       .then((doc) => {
         if (doc.exists) {
+          if (data.author.email === doc.data().email)
+            reject(`You can't invite yourself.`);
           const invite: UserNotification = {
             id: v4(),
             type: "invitation",
@@ -144,6 +148,67 @@ export const sendInvitation = async (data: UserInvitation) => {
   });
 };
 
+export const acceptInvitation = async (
+  socketId: string,
+  data: UserNotification
+) => {
+  return new Promise((resolve, reject) => {
+    const user = activeUsers.find((user: User) => user.socketId === socketId);
+    const channel = rooms.find(
+      (channel: Channel) => channel.id === data.channelId
+    );
+    delete user.socketId;
+    deleteNotification(user, data).catch((error) => reject(error));
+    firestore
+      .collection("channels")
+      .doc(channel.id)
+      .update({ users: admin.firestore.FieldValue.arrayUnion(user) })
+      .then(() =>
+        firestore
+          .collection("users")
+          .doc(user.name)
+          .update({
+            channels: admin.firestore.FieldValue.arrayUnion(
+              firestore.collection("channels").doc(data.channelId)
+            ),
+          })
+          .then(() => {
+            const message = getDefMsg(
+              user,
+              `${user.name} has joined the room!`,
+              channel,
+              true
+            );
+
+            resolve({ channel, message });
+          })
+          .catch(() => reject("Couldn't connect to the database."))
+      );
+  });
+};
+
+export const deleteNotification = async (
+  user: User,
+  notification: UserNotification
+) => {
+  return new Promise((resolve, reject) => {
+    const fireNotification: FirebaseNotification = (notification as unknown) as FirebaseNotification;
+    firestore
+      .collection("users")
+      .doc(user.name)
+      .update({
+        notifications: admin.firestore.FieldValue.arrayRemove({
+          ...notification,
+          date: new admin.firestore.Timestamp(
+            fireNotification.date._seconds,
+            fireNotification.date._nanoseconds
+          ),
+        }),
+      })
+      .catch(() => reject("Couldn't connecto to the database."));
+  });
+};
+
 export const activeUser = async (data: User) => {
   activeUsers.push(data);
   return new Promise((resolve, reject) => {
@@ -169,6 +234,21 @@ export const activeUser = async (data: User) => {
 };
 
 export const deActiveUser = (id: string) => {
-  const index = activeUsers.findIndex((u) => u.socketId === id);
-  activeUsers.splice(index, 1);
+  const user = activeUsers.find((u) => u.socketId === id);
+  console.log(user);
+  if (user) {
+    user.publicChannels.forEach((prId) => {
+      const roomWithUser = publicRooms.find((pr) => pr.id === prId);
+      const index = roomWithUser.users.indexOf(user);
+      roomWithUser.users.splice(index, 1);
+    });
+    const index = activeUsers.findIndex((u) => u.socketId === id);
+    activeUsers.splice(index, 1);
+  }
+};
+
+export const publicList = () => {
+  return publicRooms.map((channel: Channel) => {
+    return { name: channel.name, users: channel.users.length };
+  });
 };

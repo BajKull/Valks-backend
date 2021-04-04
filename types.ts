@@ -5,6 +5,7 @@ export type User = {
   email: string;
   avatar: string;
   color: string;
+  publicChannels: string[];
 };
 
 export type Message = {
@@ -13,6 +14,7 @@ export type Message = {
   date: Date;
   msg: string;
   channel: Channel;
+  system: boolean;
 };
 
 export type Channel = {
@@ -40,8 +42,18 @@ export type UserNotification = {
   channelId?: string;
 };
 
+export type FirebaseNotification = {
+  id: string;
+  type: "invitation" | "mention";
+  message: string;
+  date: { _seconds: number; _nanoseconds: number };
+  channelId?: string;
+};
+
 export type UserInvitation = {
   author: User;
   channel: Channel;
   name: string;
 };
+
+export type JoinPublic = { user: User; category: string };
