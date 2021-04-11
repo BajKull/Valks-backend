@@ -271,29 +271,52 @@ export const publicList = () => {
     });
 };
 
-export const leaveChannel = (userEmail: string, channelId: string) => {
-  const channel = rooms.find((r) => r.id === channelId);
-  const activeUser = activeUsers.find((u) => u.email === userEmail);
-  if (channel.type === "public") {
-    const chIndex = activeUser.publicChannels.findIndex(
-      (channelId) => channelId === channel.id
+export const leaveChannel = (user: User, channelId: string) => {
+  return new Promise((res, rej) => {
+    const channel = rooms.find((r) => r.id === channelId);
+    const activeUser = activeUsers.find((u) => u.email === user.email);
+
+    const msg = getDefMsg(
+      activeUser,
+      `${activeUser.name} has left the channel.`,
+      channel,
+      true
     );
-    activeUser.publicChannels.splice(chIndex, 1);
-  }
-  if (channel.type === "private") {
-    firestore
-      .collection("channels")
-      .doc(channel.id)
-      .update({
-        users: admin.firestore.FieldValue.arrayRemove(userEmail),
-      });
-  }
-  const uIndex = channel.users.findIndex((u) => u === userEmail);
-  channel.users.splice(uIndex, 1);
-  const msg = getDefMsg(
-    activeUser,
-    `${activeUser.name} has left the channel.`,
-    channel,
-    true
-  );
+
+    if (channel.type === "public") {
+      const chIndex = activeUser.publicChannels.findIndex(
+        (channelId) => channelId === channel.id
+      );
+      activeUser.publicChannels.splice(chIndex, 1);
+      const uIndex = channel.users.findIndex((u) => u === user.email);
+      channel.users.splice(uIndex, 1);
+      res(msg);
+    }
+    if (channel.type === "private") {
+      firestore
+        .collection("channels")
+        .doc(channel.id)
+        .update({
+          users: admin.firestore.FieldValue.arrayRemove(user.email),
+        })
+        .then(() => {
+          firestore
+            .collection("users")
+            .doc(user.name)
+            .update({
+              channels: admin.firestore.FieldValue.arrayRemove(
+                firestore.collection("channels").doc(channelId)
+              ),
+            })
+            .then(() => {
+              const uIndex = channel.users.findIndex((u) => u === user.email);
+              channel.users.splice(uIndex, 1);
+              res(msg);
+            });
+        })
+        .catch(() => {
+          rej(`Couldn't connect to the database.`);
+        });
+    }
+  });
 };

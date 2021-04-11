@@ -63,3 +63,4 @@ export type UserInvitation = {
 };
 
 export type JoinPublic = { user: User; category: string };
+export type LeaveChannel = { user: User; channel: string };

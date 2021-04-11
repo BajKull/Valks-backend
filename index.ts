@@ -12,6 +12,7 @@ import {
   joinPublic,
   publicList,
   getUserList,
+  leaveChannel,
 } from "./functions";
 import {
   CreateRoom,
@@ -166,6 +167,25 @@ io.on("connection", (socket: Socket) => {
       message: "List of public channels successfully fetched!",
       data: publicList(),
     });
+  });
+
+  socket.on("leaveChannel", (data, callback) => {
+    leaveChannel(data.user, data.channel)
+      .then((res) => {
+        socket.leave(data.channel);
+        socket.broadcast.to(data.channel).emit("message", res);
+        callback({
+          type: "success",
+          message: "Channel successfully left.",
+          data: data.channel,
+        });
+      })
+      .catch((error) => {
+        callback({
+          type: "error",
+          message: error,
+        });
+      });
   });
 });
 
