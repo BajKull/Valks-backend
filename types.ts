@@ -1,11 +1,17 @@
 export type User = {
-  id: string;
   socketId: string;
   name: string;
   email: string;
   avatar: string;
   color: string;
   publicChannels: string[];
+};
+
+export type FirebaseUser = {
+  name: string;
+  email: string;
+  avatar: string;
+  color: string;
 };
 
 export type Message = {
@@ -22,7 +28,7 @@ export type Channel = {
   name: string;
   category: string;
   size: number;
-  users: User[];
+  users: string[];
   messages: Message[];
   type: "private" | "public";
   avatar: string;

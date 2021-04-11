@@ -8,17 +8,18 @@ import {
   UserInvitation,
   UserNotification,
   FirebaseNotification,
+  FirebaseUser,
 } from "./types";
 import { firestore, admin } from "./firebase";
 import { getDefMsg, getDefRoom } from "./defaultObjects";
 
 const rooms: Channel[] = [];
-const publicRooms: Channel[] = [];
+const users: FirebaseUser[] = [];
 const activeUsers: User[] = [];
 
 const init = () => {
   categories.forEach((cat: string) => {
-    publicRooms.push(getDefRoom(cat, cat, "public"));
+    rooms.push(getDefRoom(cat, cat, "public"));
   });
   firestore
     .collection("channels")
@@ -29,26 +30,35 @@ const init = () => {
         if (ch) rooms.push(ch);
       });
     });
+  firestore
+    .collection("users")
+    .get()
+    .then((res) => {
+      res.forEach((user) => {
+        const u = user.data() as User;
+        if (u) users.push(u);
+      });
+    });
 };
 init();
 
-export const joinRoom = (user: User, roomId: string) => {
-  const room = rooms.find((room) => room.id === roomId);
-  if (room) {
-    if (room.users.length >= room.size) throw new Error("Room is full.");
-    room.users.push(user);
-    return room.users;
-  } else throw new Error("Invalid room ID.");
-};
+export const getUserList = (channel: string) =>
+  rooms
+    .find((r) => r.id === channel)
+    .users.map((user) => users.find((u) => u.email === user));
 
 export const joinPublic = (u: User, category: string) => {
-  const room = publicRooms.find((room) => room.category === category);
+  const room = rooms.find(
+    (room) => room.type === "public" && room.category === category
+  );
   if (room) {
-    room.users.push(u);
-    const active = activeUsers.find((u) => u.id === u.id);
+    const active = activeUsers.find((user) => user.email === u.email);
+    if (!active)
+      throw new Error(`Session expired. Reload the page and try again.`);
+    room.users.push(u.email);
     active.publicChannels.push(room.id);
-    const m1 = getDefMsg(u, `${u.name}, welcome the room!`, room, true);
-    const m2 = getDefMsg(u, `${u.name} has joined the room!`, room, true);
+    const m1 = getDefMsg(u, `${u.name}, welcome the channel!`, room, true);
+    const m2 = getDefMsg(u, `${u.name} has joined the channel!`, room, true);
     return { room, m1, m2 };
   } else throw new Error("Invalid category.");
 };
@@ -65,10 +75,10 @@ export const createRoom = async (data: CreateRoom) => {
       reject("Category can't be longer than 32 characters.");
 
     const room = getDefRoom(data.name, data.category, "private");
-    room.users.push(data.user);
+    room.users.push(data.user.email);
     const msg = getDefMsg(
       data.user,
-      `${data.user.name}, welcome to the room ${data.name}!`,
+      `${data.user.name}, welcome to the channel ${data.name}!`,
       room,
       true
     );
@@ -99,8 +109,8 @@ export const sendMessage = (data: Message) => {
   const msg = getDefMsg(data.author, data.msg, data.channel, false);
   const room = rooms.find((r) => r.id === data.channel.id);
   if (!room) {
-    const pRoom = publicRooms.find((r) => r.id === data.channel.id);
-    if (!pRoom) throw new Error("There is no room with this id.");
+    const pRoom = rooms.find((r) => r.id === data.channel.id);
+    if (!pRoom) throw new Error("There is no channel with this id.");
     pRoom.messages.push(msg);
     return msg;
   }
@@ -118,10 +128,15 @@ export const sendInvitation = async (data: UserInvitation) => {
         if (doc.exists) {
           if (data.author.email === doc.data().email)
             reject(`You can't invite yourself.`);
+          const userChannels: string[] = doc
+            .data()
+            .channels.map((ref) => ref._path.segments[1]);
+          if (userChannels.includes(data.channel.id))
+            reject(`User is already a channel member.`);
           const invite: UserNotification = {
             id: v4(),
             type: "invitation",
-            message: `${data.author.name} invited you to room ${data.channel.name}`,
+            message: `${data.author.name} invited you to channel ${data.channel.name}`,
             date: new Date(Date.now()),
             channelId: data.channel.id,
           };
@@ -132,9 +147,7 @@ export const sendInvitation = async (data: UserInvitation) => {
               notifications: admin.firestore.FieldValue.arrayUnion(invite),
             })
             .then(() => {
-              const user = activeUsers.find(
-                (user: User) => user.name === data.name
-              );
+              const user = activeUsers.find((u: User) => u.name === data.name);
               resolve({ user, invite });
             })
             .catch(() => {
@@ -162,7 +175,7 @@ export const acceptInvitation = async (
     firestore
       .collection("channels")
       .doc(channel.id)
-      .update({ users: admin.firestore.FieldValue.arrayUnion(user) })
+      .update({ users: admin.firestore.FieldValue.arrayUnion(user.email) })
       .then(() =>
         firestore
           .collection("users")
@@ -175,7 +188,7 @@ export const acceptInvitation = async (
           .then(() => {
             const message = getDefMsg(
               user,
-              `${user.name} has joined the room!`,
+              `${user.name} has joined the channel!`,
               channel,
               true
             );
@@ -221,9 +234,13 @@ export const activeUser = async (data: User) => {
         if (data) {
           const mapped = {
             ...data,
-            channels: data.channels.map((channel) =>
-              rooms.find((r: Channel) => r.id === channel._path.segments[1])
-            ),
+            channels: data.channels
+              .map((channel) =>
+                rooms.find((r: Channel) => r.id === channel._path.segments[1])
+              )
+              .map((r) => {
+                return { ...r, users: getUserList(r.id) };
+              }),
           };
           resolve(mapped);
         }
@@ -235,11 +252,10 @@ export const activeUser = async (data: User) => {
 
 export const deActiveUser = (id: string) => {
   const user = activeUsers.find((u) => u.socketId === id);
-  console.log(user);
   if (user) {
     user.publicChannels.forEach((prId) => {
-      const roomWithUser = publicRooms.find((pr) => pr.id === prId);
-      const index = roomWithUser.users.indexOf(user);
+      const roomWithUser = rooms.find((pr) => pr.id === prId);
+      const index = roomWithUser.users.indexOf(user.email);
       roomWithUser.users.splice(index, 1);
     });
     const index = activeUsers.findIndex((u) => u.socketId === id);
@@ -248,7 +264,36 @@ export const deActiveUser = (id: string) => {
 };
 
 export const publicList = () => {
-  return publicRooms.map((channel: Channel) => {
-    return { name: channel.name, users: channel.users.length };
-  });
+  return rooms
+    .filter((r) => r.type === "public")
+    .map((channel: Channel) => {
+      return { name: channel.name, users: channel.users.length };
+    });
+};
+
+export const leaveChannel = (userEmail: string, channelId: string) => {
+  const channel = rooms.find((r) => r.id === channelId);
+  const activeUser = activeUsers.find((u) => u.email === userEmail);
+  if (channel.type === "public") {
+    const chIndex = activeUser.publicChannels.findIndex(
+      (channelId) => channelId === channel.id
+    );
+    activeUser.publicChannels.splice(chIndex, 1);
+  }
+  if (channel.type === "private") {
+    firestore
+      .collection("channels")
+      .doc(channel.id)
+      .update({
+        users: admin.firestore.FieldValue.arrayRemove(userEmail),
+      });
+  }
+  const uIndex = channel.users.findIndex((u) => u === userEmail);
+  channel.users.splice(uIndex, 1);
+  const msg = getDefMsg(
+    activeUser,
+    `${activeUser.name} has left the channel.`,
+    channel,
+    true
+  );
 };

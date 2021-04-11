@@ -1,9 +1,7 @@
 require("dotenv").config();
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
-import { getDefMsg } from "./defaultObjects";
 import {
-  joinRoom,
   createRoom,
   sendMessage,
   sendInvitation,
@@ -13,9 +11,9 @@ import {
   deleteNotification,
   joinPublic,
   publicList,
+  getUserList,
 } from "./functions";
 import {
-  Channel,
   CreateRoom,
   JoinPublic,
   Message,
@@ -55,26 +53,6 @@ io.on("connection", (socket: Socket) => {
       });
   });
   socket.on("disconnect", () => deActiveUser(socket.id));
-
-  socket.on("joinRoom", (user: User, roomId: string) => {
-    try {
-      const users = joinRoom(user, roomId);
-      socket.join(roomId);
-      socket.broadcast.to(roomId).emit("message", {
-        type: "message",
-        message: `User ${user.name} has joined the room!`,
-        date: Date.now(),
-      });
-      socket.emit("message", {
-        type: "message",
-        message: `${user.name}, welcome to the room!`,
-        date: Date.now(),
-      });
-      io.to(roomId).emit("userList", { users: users });
-    } catch (error) {
-      socket.emit("error", { type: "error", message: error });
-    }
-  });
 
   socket.on("createRoom", (data: CreateRoom, callback) => {
     createRoom(data)
@@ -134,6 +112,10 @@ io.on("connection", (socket: Socket) => {
           socket.join(res.channel.id);
           socket.to(res.channel.id).emit("message", res.message);
           socket.emit("joinChannel", res.channel);
+          socket.broadcast.to(res.channel.id).emit("userList", {
+            channel: res.channel.id,
+            userList: getUserList(res.channel.id),
+          });
           callback({
             type: "success",
             message: "Invite successfully accepted!",
@@ -160,7 +142,10 @@ io.on("connection", (socket: Socket) => {
       });
       socket.emit("message", m1);
       socket.broadcast.to(room.id).emit("message", m2);
-      io.to(room.id).emit("userList", { users: room.users });
+      io.to(room.id).emit("userList", {
+        channel: room.id,
+        users: getUserList(room.id),
+      });
     } catch (error) {
       callback({
         type: "error",
