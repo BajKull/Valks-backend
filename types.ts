@@ -5,6 +5,7 @@ export type User = {
   avatar: string;
   color: string;
   publicChannels: string[];
+  blockList: string[];
 };
 
 export type FirebaseUser = {
@@ -12,6 +13,7 @@ export type FirebaseUser = {
   email: string;
   avatar: string;
   color: string;
+  blockList: string[];
 };
 
 export type Message = {

@@ -13,6 +13,7 @@ import {
   publicList,
   getUserList,
   leaveChannel,
+  blockUser,
 } from "./functions";
 import {
   CreateRoom,
@@ -186,6 +187,10 @@ io.on("connection", (socket: Socket) => {
           message: error,
         });
       });
+  });
+
+  socket.on("blockUser", (data) => {
+    blockUser(data.user, data.blocked);
   });
 });
 

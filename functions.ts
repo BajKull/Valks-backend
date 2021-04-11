@@ -320,3 +320,26 @@ export const leaveChannel = (user: User, channelId: string) => {
     }
   });
 };
+
+export const blockUser = (user: User, blocked: string) => {
+  const index = users.findIndex((u) => u.email === user.email);
+  if (index === -1) return;
+  if (users[index].blockList.includes(blocked)) {
+    const blockedIndex = users[index].blockList.findIndex((b) => b === blocked);
+    users[index].blockList.splice(blockedIndex, 1);
+    firestore
+      .collection("users")
+      .doc(user.name)
+      .update({
+        blocked: admin.firestore.FieldValue.arrayRemove(blocked),
+      });
+  } else {
+    users[index].blockList.push(blocked);
+    firestore
+      .collection("users")
+      .doc(user.name)
+      .update({
+        blocked: admin.firestore.FieldValue.arrayUnion(blocked),
+      });
+  }
+};
