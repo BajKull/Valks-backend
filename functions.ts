@@ -57,8 +57,8 @@ export const joinPublic = (u: User, category: string) => {
       throw new Error(`Session expired. Reload the page and try again.`);
     room.users.push(u.email);
     active.publicChannels.push(room.id);
-    const m1 = getDefMsg(u, `${u.name}, welcome the channel!`, room, true);
-    const m2 = getDefMsg(u, `${u.name} has joined the channel!`, room, true);
+    const m1 = getDefMsg(u, `${u.name}, welcome the channel!`, room.id, true);
+    const m2 = getDefMsg(u, `${u.name} has joined the channel!`, room.id, true);
     return { room, m1, m2 };
   } else throw new Error("Invalid category.");
 };
@@ -79,7 +79,7 @@ export const createRoom = async (data: CreateRoom) => {
     const msg = getDefMsg(
       data.user,
       `${data.user.name}, welcome to the channel ${data.name}!`,
-      room,
+      room.id,
       true
     );
 
@@ -106,16 +106,27 @@ export const createRoom = async (data: CreateRoom) => {
 };
 
 export const sendMessage = (data: Message) => {
-  const msg = getDefMsg(data.author, data.msg, data.channel, false);
-  const room = rooms.find((r) => r.id === data.channel.id);
-  if (!room) {
-    const pRoom = rooms.find((r) => r.id === data.channel.id);
-    if (!pRoom) throw new Error("There is no channel with this id.");
-    pRoom.messages.push(msg);
-    return msg;
-  }
-  room.messages.push(msg);
-  return msg;
+  return new Promise((resolve, reject) => {
+    const msg = getDefMsg(data.author, data.msg, data.channel, false);
+    const room = rooms.find((r) => r.id === data.channel);
+    if (!room) {
+      const pRoom = rooms.find((r) => r.id === data.channel);
+      if (!pRoom) reject("There is no channel with this id.");
+      pRoom.messages.push(msg);
+      resolve(msg);
+    }
+    firestore
+      .collection("channels")
+      .doc(room.id)
+      .update({
+        messages: admin.firestore.FieldValue.arrayUnion(msg),
+      })
+      .then(() => {
+        room.messages.push(msg);
+        resolve(msg);
+      })
+      .catch(() => reject("Couldn't connect to the database."));
+  });
 };
 
 export const sendInvitation = async (data: UserInvitation) => {
@@ -189,7 +200,7 @@ export const acceptInvitation = async (
             const message = getDefMsg(
               user,
               `${user.name} has joined the channel!`,
-              channel,
+              channel.id,
               true
             );
 
@@ -284,7 +295,7 @@ export const leaveChannel = (user: User, channelId: string) => {
     const msg = getDefMsg(
       activeUser,
       `${activeUser.name} has left the channel.`,
-      channel,
+      channel.id,
       true
     );
 

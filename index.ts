@@ -77,15 +77,16 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("sendMessage", (data: Message, callback) => {
-    try {
-      const msg = sendMessage(data);
-      io.in(msg.channel.id).emit("message", msg);
-    } catch (error) {
-      callback({
-        type: "error",
-        message: error.message,
+    sendMessage(data)
+      .then((msg: any) => {
+        io.in(msg.channel).emit("message", msg);
+      })
+      .catch((error) => {
+        callback({
+          type: "error",
+          message: error.message,
+        });
       });
-    }
   });
 
   socket.on("sendInvitation", (data: UserInvitation, callback) => {

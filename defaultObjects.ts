@@ -24,7 +24,7 @@ export const getDefRoom = (
 export const getDefMsg = (
   author: User,
   msg: string,
-  channel: Channel,
+  channel: string,
   system: boolean
 ) => {
   const message: Message = {
