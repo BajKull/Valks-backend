@@ -11,7 +11,7 @@ import {
   FirebaseUser,
 } from "./types";
 import { firestore, admin } from "./firebase";
-import { getDefMsg, getDefRoom } from "./defaultObjects";
+import { getDefMsg, getDefNotification, getDefRoom } from "./defaultObjects";
 
 const rooms: Channel[] = [];
 const users: FirebaseUser[] = [];
@@ -115,17 +115,35 @@ export const sendMessage = (data: Message) => {
       pRoom.messages.push(msg);
       resolve(msg);
     }
+    const tags = msg.msg
+      .match(/@[a-z0-9\d]+/gi)
+      ?.map((t) => t.substring(1))
+      .filter((t) => t !== data.author.name);
+    const activeTags = [];
+    tags?.forEach((tag) => {
+      const a = activeUsers.find((u) => u.name === tag);
+      const notification = getDefNotification(msg.channel, "mention", msg.msg);
+      if (a) activeTags.push({ user: a, notification });
+      firestore
+        .collection("users")
+        .doc(tag)
+        .update({
+          notifications: admin.firestore.FieldValue.arrayUnion(notification),
+        });
+    });
     firestore
       .collection("channels")
-      .doc(room.id)
+      .doc(data.channel)
       .update({
         messages: admin.firestore.FieldValue.arrayUnion(msg),
       })
       .then(() => {
         room.messages.push(msg);
-        resolve(msg);
+        resolve({ msg, users: activeTags });
       })
-      .catch(() => reject("Couldn't connect to the database."));
+      .catch((err) => {
+        reject("Couldn't connect to the database.");
+      });
   });
 };
 
@@ -260,7 +278,6 @@ export const activeUser = async (data: User) => {
         reject("Couldn't connect to the database.");
       })
       .catch((error) => {
-        console.log(error);
         reject("Couldn't connect to the database.");
       });
   });

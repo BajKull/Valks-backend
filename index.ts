@@ -78,8 +78,11 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("sendMessage", (data: Message, callback) => {
     sendMessage(data)
-      .then((msg: any) => {
-        io.in(msg.channel).emit("message", msg);
+      .then((data: any) => {
+        io.in(data.msg.channel).emit("message", data.msg);
+        data.users.forEach((u) => {
+          socket.to(u.user.socketId).emit("notification", u.notification);
+        });
       })
       .catch((error) => {
         callback({

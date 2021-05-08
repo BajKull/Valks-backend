@@ -1,4 +1,4 @@
-import { Channel, Message, User } from "./types";
+import { Channel, Message, User, UserNotification } from "./types";
 import { v4 } from "uuid";
 
 const DEFAULT_ROOM_SIZE = 20;
@@ -36,4 +36,19 @@ export const getDefMsg = (
     system,
   };
   return message;
+};
+
+export const getDefNotification = (
+  channel: string,
+  type: "mention" | "invitation",
+  message: string
+) => {
+  const notification: UserNotification = {
+    id: v4(),
+    type,
+    message,
+    date: new Date(Date.now()),
+    channelId: channel,
+  };
+  return notification;
 };
