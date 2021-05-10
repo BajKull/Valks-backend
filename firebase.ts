@@ -15,9 +15,11 @@ const config = {
 
 const app = fbadmin.initializeApp({
   credential: fbadmin.credential.cert(config),
+  storageBucket: `${process.env.FB_PROJECT_ID}.appspot.com`,
 });
 
 const firestore = app.firestore();
+const storage = app.storage().bucket();
 const admin = fbadmin;
 
-export { firestore, admin };
+export { firestore, admin, storage };

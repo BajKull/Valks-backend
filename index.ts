@@ -14,6 +14,7 @@ import {
   getUserList,
   leaveChannel,
   blockUser,
+  changeAvatar,
 } from "./functions";
 import {
   CreateRoom,
@@ -37,22 +38,20 @@ const io = new Server(httpServer, {
 
 io.on("connection", (socket: Socket) => {
   console.log(socket.id);
-  socket.on("activeUser", (user: User, callback) => {
-    activeUser(user)
-      .then((res: any) => {
-        res.channels.forEach((channel) => socket.join(channel.id));
-        callback({
-          type: "success",
-          message: "User data successfully fetched!",
-          data: res,
-        });
-      })
-      .catch((error) => {
-        callback({
-          type: "error",
-          message: error,
-        });
+  socket.on("activeUser", (email: string, callback) => {
+    try {
+      const user = activeUser(email, socket.id);
+      callback({
+        type: "success",
+        message: "User data successfully fetched!",
+        data: user,
       });
+    } catch (error) {
+      callback({
+        type: "error",
+        message: error,
+      });
+    }
   });
   socket.on("disconnect", () => deActiveUser(socket.id));
 
@@ -195,6 +194,10 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("blockUser", (data) => {
     blockUser(data.user, data.blocked);
+  });
+
+  socket.on("changeAvatar", (data) => {
+    changeAvatar(data.user, data.url);
   });
 });
 

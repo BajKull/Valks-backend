@@ -10,7 +10,7 @@ import {
   FirebaseNotification,
   FirebaseUser,
 } from "./types";
-import { firestore, admin } from "./firebase";
+import { firestore, admin, storage } from "./firebase";
 import { getDefMsg, getDefNotification, getDefRoom } from "./defaultObjects";
 
 const rooms: Channel[] = [];
@@ -35,7 +35,7 @@ const init = () => {
     .get()
     .then((res) => {
       res.forEach((user) => {
-        const u = user.data() as User;
+        const u = user.data() as FirebaseUser;
         if (u) users.push(u);
       });
     });
@@ -124,12 +124,14 @@ export const sendMessage = (data: Message) => {
       const a = activeUsers.find((u) => u.name === tag);
       const notification = getDefNotification(msg.channel, "mention", msg.msg);
       if (a) activeTags.push({ user: a, notification });
-      firestore
-        .collection("users")
-        .doc(tag)
-        .update({
-          notifications: admin.firestore.FieldValue.arrayUnion(notification),
-        });
+      const userExists = users.find((u) => u.name === tag);
+      if (userExists)
+        firestore
+          .collection("users")
+          .doc(tag)
+          .update({
+            notifications: admin.firestore.FieldValue.arrayUnion(notification),
+          });
     });
     firestore
       .collection("channels")
@@ -251,36 +253,23 @@ export const deleteNotification = async (
   });
 };
 
-export const activeUser = async (data: User) => {
-  activeUsers.push(data);
-  return new Promise((resolve, reject) => {
-    firestore
-      .collection("users")
-      .doc(data.name)
-      .get()
-      .then((res) => {
-        const data = res.data();
-        if (data) {
-          const mapped = {
-            ...data,
-            channels: data.channels
-              .map((channel) => {
-                return rooms.find(
-                  (r: Channel) => r.id === channel._path.segments[1]
-                );
-              })
-              .map((r) => {
-                return { ...r, users: getUserList(r.id) };
-              }),
-          };
-          resolve(mapped);
-        }
-        reject("Couldn't connect to the database.");
-      })
-      .catch((error) => {
-        reject("Couldn't connect to the database.");
-      });
-  });
+export const activeUser = (email: string, socketId: string) => {
+  const user = users.find((u) => u.email === email);
+  if (!user) throw new Error("Try again.");
+  user.channels
+    .map((channel) => {
+      return rooms.find((r: Channel) => r.id === channel._path.segments[1]);
+    })
+    .map((r) => {
+      return { ...r, users: getUserList(r.id) };
+    });
+  const u: User = {
+    socketId: socketId,
+    ...user,
+    publicChannels: [],
+  };
+  activeUsers.push(u);
+  return user;
 };
 
 export const deActiveUser = (id: string) => {
@@ -387,4 +376,14 @@ export const blockUser = (user: User, blocked: string) => {
         blocked: admin.firestore.FieldValue.arrayUnion(blocked),
       });
   }
+};
+
+export const changeAvatar = (user: User, url: string) => {
+  firestore
+    .collection("users")
+    .doc(user.name)
+    .update({ avatar: url })
+    .then(() => {
+      users.find((u) => u.email === user.email).avatar = url;
+    });
 };

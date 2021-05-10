@@ -1,11 +1,14 @@
+import { DocumentData } from "@firebase/firestore-types";
+
 export type User = {
   socketId: string;
   name: string;
   email: string;
   avatar: string;
   color: string;
-  publicChannels: string[];
   blockList: string[];
+  publicChannels: string[];
+  notifications: UserNotification[];
 };
 
 export type FirebaseUser = {
@@ -14,6 +17,8 @@ export type FirebaseUser = {
   avatar: string;
   color: string;
   blockList: string[];
+  channels: DocumentData[];
+  notifications: UserNotification[];
 };
 
 export type Message = {
