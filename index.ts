@@ -131,12 +131,13 @@ io.on("connection", (socket: Socket) => {
     acceptInvitation(data.user, data.invite)
       .then((res: any) => {
         if (res.channel) {
+          console.log(res);
           socket.join(res.channel.id);
           socket.to(res.channel.id).emit("message", res.message);
           socket.emit("joinChannel", res.channel);
           socket.broadcast.to(res.channel.id).emit("userList", {
             channel: res.channel.id,
-            userList: getUserList(res.channel.id),
+            users: getUserList(res.channel.id),
           });
           callback({
             type: "success",
@@ -199,6 +200,10 @@ io.on("connection", (socket: Socket) => {
       .then((res) => {
         socket.leave(data.channel);
         socket.broadcast.to(data.channel).emit("message", res);
+        socket.broadcast.to(data.channel).emit("userList", {
+          channel: data.channel,
+          users: getUserList(data.channel),
+        });
         callback({
           type: "success",
           message: "Channel successfully left.",

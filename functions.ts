@@ -97,9 +97,10 @@ export const joinPublic = (u: FirebaseUser, category: string) => {
       throw new Error(`Session expired. Reload the page and try again.`);
     room.users.push(u.email);
     active.publicChannels.push(room.id);
+    const r = { ...room, users: getUserList(room.id) };
     const m1 = getDefMsg(u, `${u.name}, welcome the channel!`, room.id, true);
     const m2 = getDefMsg(u, `${u.name} has joined the channel!`, room.id, true);
-    return { room, m1, m2 };
+    return { room: r, m1, m2 };
   } else throw new Error("Invalid category.");
 };
 
@@ -166,6 +167,7 @@ export const sendMessage = (data: Message) => {
       const notification = getDefNotification(msg.channel, "mention", msg.msg);
       if (a) activeTags.push({ user: a, notification });
       const userExists = users.find((u) => u.name === tag);
+      userExists.notifications.push(notification);
       if (userExists)
         firestore
           .collection("users")
@@ -264,7 +266,9 @@ export const acceptInvitation = async (
               true
             );
             usr.channels.push(channel.id);
-            resolve({ channel, message });
+            channel.users.push(usr.email);
+            const ch = { ...channel, users: getUserList(channel.id) };
+            resolve({ channel: ch, message });
           })
           .catch(() => reject("Couldn't connect to the database."))
       );
@@ -276,14 +280,15 @@ export const deleteNotification = async (
   notification: FirebaseNotification | UserNotification
 ) => {
   return new Promise((resolve, reject) => {
-    const fireNotification: FirebaseNotification = (notification as unknown) as FirebaseNotification;
+    const fireNotification: FirebaseNotification =
+      notification as unknown as FirebaseNotification;
 
     if ((notification as FirebaseNotification).date._seconds === undefined) {
       const d: Date = new Date((notification as UserNotification).date);
-      console.log(d, typeof d);
+      console.log(d.getMilliseconds());
       notification.date = {
-        _nanoseconds: d.getMilliseconds(),
-        _seconds: d.getMilliseconds() * 1000,
+        _nanoseconds: d.getTime(),
+        _seconds: d.getTime() * 1000,
       };
     }
     firestore
@@ -311,6 +316,7 @@ export const deleteNotification = async (
 
 export const activeUser = (email: string, socketId: string) => {
   const usr = users.find((u) => u.email === email);
+  console.log(usr.notifications);
   if (!usr) throw new Error("Try again.");
   const user = {
     ...usr,
@@ -382,6 +388,8 @@ export const leaveChannel = (user: FirebaseUser, channelId: string) => {
           channels: admin.firestore.FieldValue.arrayRemove(channelId),
         })
         .then(() => {
+          const index = usr.channels.findIndex((c) => c === channelId);
+          usr.channels.splice(index, 1);
           if (channel.users.length === 1) {
             const chIndex = rooms.indexOf(channel);
             rooms.splice(chIndex, 1);
