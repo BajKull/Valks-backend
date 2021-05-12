@@ -1,4 +1,10 @@
-import { Channel, Message, User, UserNotification } from "./types";
+import {
+  Channel,
+  FirebaseUser,
+  Message,
+  User,
+  UserNotification,
+} from "./types";
 import { v4 } from "uuid";
 
 const DEFAULT_ROOM_SIZE = 20;
@@ -22,7 +28,7 @@ export const getDefRoom = (
 };
 
 export const getDefMsg = (
-  author: User,
+  author: FirebaseUser,
   msg: string,
   channel: string,
   system: boolean

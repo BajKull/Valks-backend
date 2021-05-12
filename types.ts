@@ -1,4 +1,4 @@
-import { DocumentData } from "@firebase/firestore-types";
+import { DocumentReference } from "@firebase/firestore-types";
 
 export type User = {
   socketId: string;
@@ -17,13 +17,13 @@ export type FirebaseUser = {
   avatar: string;
   color: string;
   blockList: string[];
-  channels: DocumentData[];
+  channels: string[];
   notifications: UserNotification[];
 };
 
 export type Message = {
   id: string;
-  author: User;
+  author: FirebaseUser;
   date: Date;
   msg: string;
   channel: string;
@@ -42,7 +42,7 @@ export type Channel = {
 };
 
 export type CreateRoom = {
-  user: User;
+  user: FirebaseUser;
   name: string;
   category: string;
 };
@@ -69,5 +69,6 @@ export type UserInvitation = {
   name: string;
 };
 
-export type JoinPublic = { user: User; category: string };
-export type LeaveChannel = { user: User; channel: string };
+export type JoinPublic = { user: FirebaseUser; category: string };
+export type LeaveChannel = { user: FirebaseUser; channel: string };
+export type AcceptInvitation = { user: FirebaseUser; invite: UserNotification };

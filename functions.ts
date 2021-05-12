@@ -10,7 +10,7 @@ import {
   FirebaseNotification,
   FirebaseUser,
 } from "./types";
-import { firestore, admin, storage } from "./firebase";
+import { firestore, admin } from "./firebase";
 import { getDefMsg, getDefNotification, getDefRoom } from "./defaultObjects";
 
 const rooms: Channel[] = [];
@@ -42,12 +42,52 @@ const init = () => {
 };
 init();
 
+export const registerUser = (user: FirebaseUser, socketId: string) => {
+  users.push(user);
+  const aUser: User = {
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar,
+    color: user.color,
+    blockList: [],
+    notifications: [],
+    socketId,
+    publicChannels: [],
+  };
+  activeUsers.push(aUser);
+};
+
+export const deleteAccount = (acc: FirebaseUser) => {
+  const user = users.find((u) => u.email === acc.email);
+  const uIndex = users.indexOf(user);
+  const aIndex = activeUsers.findIndex((a) => a.email === user.email);
+  const channelIndexes = user.channels;
+  user.channels.forEach(async (ch) => {
+    const channel = rooms.find((r) => r.id === ch);
+    const index = channel.users.findIndex((u) => u === user.email);
+    channel.users.splice(index, 1);
+    await leaveChannel(user, ch);
+  });
+  firestore.collection("users").doc(acc.name).delete();
+  users.splice(uIndex, 1);
+  activeUsers.splice(aIndex, 1);
+  return channelIndexes;
+};
+
 export const getUserList = (channel: string) =>
   rooms
     .find((r) => r.id === channel)
-    .users.map((user) => users.find((u) => u.email === user));
+    .users.map((user) => {
+      const u = users.find((u) => u.email === user);
+      return {
+        email: u.email,
+        name: u.name,
+        avatar: u.avatar,
+        color: u.color,
+      };
+    });
 
-export const joinPublic = (u: User, category: string) => {
+export const joinPublic = (u: FirebaseUser, category: string) => {
   const room = rooms.find(
     (room) => room.type === "public" && room.category === category
   );
@@ -92,12 +132,13 @@ export const createRoom = async (data: CreateRoom) => {
           .collection("users")
           .doc(data.user.name)
           .update({
-            channels: admin.firestore.FieldValue.arrayUnion(
-              firestore.collection("channels").doc(room.id)
-            ),
+            channels: admin.firestore.FieldValue.arrayUnion(room.id),
           });
         rooms.push(room);
-        resolve({ room, msg });
+        const user = users.find((u) => u.email === data.user.email);
+        const r = { ...room, users: getUserList(room.id) };
+        user.channels.push(room.id);
+        resolve({ room: r, msg });
       })
       .catch((err) => {
         reject("Couldn't connect to the databse.");
@@ -151,7 +192,7 @@ export const sendMessage = (data: Message) => {
 
 export const sendInvitation = async (data: UserInvitation) => {
   return new Promise((resolve, reject) => {
-    const user = firestore
+    firestore
       .collection("users")
       .doc(data.name)
       .get()
@@ -179,6 +220,8 @@ export const sendInvitation = async (data: UserInvitation) => {
             })
             .then(() => {
               const user = activeUsers.find((u: User) => u.name === data.name);
+              const u = users.findIndex((u) => u.email === doc.data().email);
+              users[u].notifications.push(invite);
               resolve({ user, invite });
             })
             .catch(() => {
@@ -193,15 +236,14 @@ export const sendInvitation = async (data: UserInvitation) => {
 };
 
 export const acceptInvitation = async (
-  socketId: string,
+  user: FirebaseUser,
   data: UserNotification
 ) => {
   return new Promise((resolve, reject) => {
-    const user = activeUsers.find((user: User) => user.socketId === socketId);
+    const usr = users.find((u) => u.email === user.email);
     const channel = rooms.find(
       (channel: Channel) => channel.id === data.channelId
     );
-    delete user.socketId;
     deleteNotification(user, data).catch((error) => reject(error));
     firestore
       .collection("channels")
@@ -212,9 +254,7 @@ export const acceptInvitation = async (
           .collection("users")
           .doc(user.name)
           .update({
-            channels: admin.firestore.FieldValue.arrayUnion(
-              firestore.collection("channels").doc(data.channelId)
-            ),
+            channels: admin.firestore.FieldValue.arrayUnion(data.channelId),
           })
           .then(() => {
             const message = getDefMsg(
@@ -223,7 +263,7 @@ export const acceptInvitation = async (
               channel.id,
               true
             );
-
+            usr.channels.push(channel.id);
             resolve({ channel, message });
           })
           .catch(() => reject("Couldn't connect to the database."))
@@ -232,11 +272,20 @@ export const acceptInvitation = async (
 };
 
 export const deleteNotification = async (
-  user: User,
-  notification: UserNotification
+  user: FirebaseUser,
+  notification: FirebaseNotification | UserNotification
 ) => {
   return new Promise((resolve, reject) => {
     const fireNotification: FirebaseNotification = (notification as unknown) as FirebaseNotification;
+
+    if ((notification as FirebaseNotification).date._seconds === undefined) {
+      const d: Date = new Date((notification as UserNotification).date);
+      console.log(d, typeof d);
+      notification.date = {
+        _nanoseconds: d.getMilliseconds(),
+        _seconds: d.getMilliseconds() * 1000,
+      };
+    }
     firestore
       .collection("users")
       .doc(user.name)
@@ -249,20 +298,30 @@ export const deleteNotification = async (
           ),
         }),
       })
+      .then(() => {
+        const usr = users.find((u) => u.email === user.email);
+        const nIndex = usr.notifications.findIndex(
+          (n) => n.id === notification.id
+        );
+        usr.notifications.splice(nIndex, 1);
+      })
       .catch(() => reject("Couldn't connecto to the database."));
   });
 };
 
 export const activeUser = (email: string, socketId: string) => {
-  const user = users.find((u) => u.email === email);
-  if (!user) throw new Error("Try again.");
-  user.channels
-    .map((channel) => {
-      return rooms.find((r: Channel) => r.id === channel._path.segments[1]);
-    })
-    .map((r) => {
-      return { ...r, users: getUserList(r.id) };
-    });
+  const usr = users.find((u) => u.email === email);
+  if (!usr) throw new Error("Try again.");
+  const user = {
+    ...usr,
+    channels: usr.channels
+      .map((channel) => {
+        return rooms.find((r) => r.id === channel);
+      })
+      .map((r) => {
+        return { ...r, users: getUserList(r.id) };
+      }),
+  };
   const u: User = {
     socketId: socketId,
     ...user,
@@ -293,19 +352,20 @@ export const publicList = () => {
     });
 };
 
-export const leaveChannel = (user: User, channelId: string) => {
+export const leaveChannel = (user: FirebaseUser, channelId: string) => {
   return new Promise((res, rej) => {
     const channel = rooms.find((r) => r.id === channelId);
-    const activeUser = activeUsers.find((u) => u.email === user.email);
+    const usr = users.find((u) => u.email === user.email);
 
     const msg = getDefMsg(
-      activeUser,
-      `${activeUser.name} has left the channel.`,
+      usr,
+      `${usr.name} has left the channel.`,
       channel.id,
       true
     );
 
     if (channel.type === "public") {
+      const activeUser = activeUsers.find((u) => u.email === user.email);
       const chIndex = activeUser.publicChannels.findIndex(
         (channelId) => channelId === channel.id
       );
@@ -317,11 +377,9 @@ export const leaveChannel = (user: User, channelId: string) => {
     if (channel.type === "private") {
       firestore
         .collection("users")
-        .doc(user.name)
+        .doc(usr.name)
         .update({
-          channels: admin.firestore.FieldValue.arrayRemove(
-            firestore.collection("channels").doc(channelId)
-          ),
+          channels: admin.firestore.FieldValue.arrayRemove(channelId),
         })
         .then(() => {
           if (channel.users.length === 1) {
@@ -350,7 +408,8 @@ export const leaveChannel = (user: User, channelId: string) => {
                 rej(`Couldn't connect to the database.`);
               });
           }
-        });
+        })
+        .catch((error) => console.log(error));
     }
   });
 };

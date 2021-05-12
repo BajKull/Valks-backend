@@ -15,9 +15,13 @@ import {
   leaveChannel,
   blockUser,
   changeAvatar,
+  registerUser,
+  deleteAccount,
 } from "./functions";
 import {
+  AcceptInvitation,
   CreateRoom,
+  FirebaseUser,
   JoinPublic,
   Message,
   User,
@@ -38,18 +42,31 @@ const io = new Server(httpServer, {
 
 io.on("connection", (socket: Socket) => {
   console.log(socket.id);
+
+  socket.on("register", (user, callback) => {
+    registerUser(user, socket.id);
+    callback(true);
+  });
+
+  socket.on("deleteAccount", (user: FirebaseUser) => {
+    const ids = deleteAccount(user);
+    ids.forEach((id) => socket.leave(id));
+  });
+
   socket.on("activeUser", (email: string, callback) => {
     try {
       const user = activeUser(email, socket.id);
+      user.channels.forEach((ch) => socket.join(ch.id));
       callback({
         type: "success",
         message: "User data successfully fetched!",
         data: user,
       });
     } catch (error) {
+      console.log(error.message);
       callback({
         type: "error",
-        message: error,
+        message: error.message,
       });
     }
   });
@@ -110,8 +127,8 @@ io.on("connection", (socket: Socket) => {
       );
   });
 
-  socket.on("acceptInvitation", (data: UserNotification, callback) => {
-    acceptInvitation(socket.id, data)
+  socket.on("acceptInvitation", (data: AcceptInvitation, callback) => {
+    acceptInvitation(data.user, data.invite)
       .then((res: any) => {
         if (res.channel) {
           socket.join(res.channel.id);
@@ -128,12 +145,13 @@ io.on("connection", (socket: Socket) => {
           });
         }
       })
-      .catch((error) =>
+      .catch((error) => {
+        console.log(error.message);
         callback({
           type: "error",
           message: error,
-        })
-      );
+        });
+      });
   });
 
   socket.on("joinPublic", (data: JoinPublic, callback) => {
@@ -159,11 +177,14 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
-  socket.on("deleteNotification", (user: User, data: UserNotification) => {
-    deleteNotification(user, data).catch((error) => {
-      console.log(error);
-    });
-  });
+  socket.on(
+    "deleteNotification",
+    (user: FirebaseUser, data: UserNotification) => {
+      deleteNotification(user, data).catch((error) => {
+        console.log(error);
+      });
+    }
+  );
 
   socket.on("publicList", (callback) => {
     callback({
