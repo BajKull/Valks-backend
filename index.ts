@@ -49,18 +49,26 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("deleteAccount", (user: FirebaseUser) => {
-    const ids = deleteAccount(user);
-    ids.forEach((id) => socket.leave(id));
+    deleteAccount(user).then((msgs: any) => {
+      msgs.forEach((msg: Message) => {
+        socket.to(msg.channel).emit("message", msg);
+        socket.to(msg.channel).emit("userList", {
+          channel: msg.channel,
+          users: getUserList(msg.channel),
+        });
+        socket.leave(msg.channel);
+      });
+    });
   });
 
   socket.on("activeUser", (email: string, callback) => {
     try {
-      const user = activeUser(email, socket.id);
+      const { user, catOfDay } = activeUser(email, socket.id);
       user.channels.forEach((ch) => socket.join(ch.id));
       callback({
         type: "success",
         message: "User data successfully fetched!",
-        data: user,
+        data: { user, catOfDay },
       });
     } catch (error) {
       console.log(error.message);
@@ -131,7 +139,6 @@ io.on("connection", (socket: Socket) => {
     acceptInvitation(data.user, data.invite)
       .then((res: any) => {
         if (res.channel) {
-          console.log(res);
           socket.join(res.channel.id);
           socket.to(res.channel.id).emit("message", res.message);
           socket.emit("joinChannel", res.channel);

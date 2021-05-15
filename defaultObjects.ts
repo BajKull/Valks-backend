@@ -36,7 +36,7 @@ export const getDefMsg = (
   const message: Message = {
     id: v4(),
     author,
-    date: new Date(Date.now()),
+    date: new Date(Date.now()).getTime(),
     msg,
     channel,
     system,
@@ -53,7 +53,7 @@ export const getDefNotification = (
     id: v4(),
     type,
     message,
-    date: new Date(Date.now()),
+    date: new Date(Date.now()).getTime(),
     channelId: channel,
   };
   return notification;

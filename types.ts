@@ -24,7 +24,7 @@ export type FirebaseUser = {
 export type Message = {
   id: string;
   author: FirebaseUser;
-  date: Date;
+  date: number;
   msg: string;
   channel: string;
   system: boolean;
@@ -51,15 +51,7 @@ export type UserNotification = {
   id: string;
   type: "invitation" | "mention";
   message: string;
-  date: Date;
-  channelId?: string;
-};
-
-export type FirebaseNotification = {
-  id: string;
-  type: "invitation" | "mention";
-  message: string;
-  date: { _seconds: number; _nanoseconds: number };
+  date: number;
   channelId?: string;
 };
 
@@ -72,3 +64,4 @@ export type UserInvitation = {
 export type JoinPublic = { user: FirebaseUser; category: string };
 export type LeaveChannel = { user: FirebaseUser; channel: string };
 export type AcceptInvitation = { user: FirebaseUser; invite: UserNotification };
+export type CategoryScore = { category: string; score: number };
