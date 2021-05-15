@@ -35,7 +35,7 @@ const httpServer = createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "https://valks.netlify.app/",
+    origin: "https://valks.netlify.app",
     methods: ["GET", "POST"],
   },
 });
