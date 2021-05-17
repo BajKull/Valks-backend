@@ -23,9 +23,6 @@ module.exports = {
   },
   target: "node",
   plugins: [
-    // new dotenv({
-    //   systemvars: true,
-    // }),
     new webpack.DefinePlugin({
       "process.env": {
         FB_TYPE: JSON.stringify(process.env.FB_TYPE),
