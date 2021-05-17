@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "nodemon index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "ts-node ./index.ts",
+    "start": "node ./build/index.js",
     "build": "webpack"
   },
   "author": "Dawid Banachowski",
