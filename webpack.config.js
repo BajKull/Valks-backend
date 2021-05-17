@@ -36,6 +36,7 @@ module.exports = {
           process.env.FB_AUTH_PROVIDER_CERT_URI
         ),
         FB_CLIENT_CERT_URI: JSON.stringify(process.env.FB_CLIENT_CERT_URI),
+        PORT: JSON.stringify(process.env.PORT),
       },
     }),
   ],
