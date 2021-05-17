@@ -21,5 +21,9 @@ module.exports = {
     path: path.resolve(__dirname, "build"),
   },
   target: "node",
-  plugins: [new dotenv()],
+  plugins: [
+    new dotenv({
+      systemvars: true,
+    }),
+  ],
 };
