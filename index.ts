@@ -31,6 +31,7 @@ import {
 } from "./types";
 
 const PORT = process.env.PORT || 5000;
+console.log(PORT);
 
 const httpServer = createServer();
 
@@ -236,3 +237,5 @@ io.on("connection", (socket: Socket) => {
 });
 
 httpServer.listen(PORT);
+
+console.log("working");
