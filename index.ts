@@ -1,4 +1,6 @@
-// require("dotenv").config();
+console.log(process.env.NODE_ENV);
+if (process.env.NODE_ENV == "development") require("dotenv").config();
+
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import {
