@@ -7,7 +7,7 @@
     "dev": "nodemon index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./build/index.js",
-    "build": "webpack"
+    "build": "webpack --env PORT=$PORT"
   },
   "author": "Dawid Banachowski",
   "license": "ISC",
