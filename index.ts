@@ -30,7 +30,7 @@ import {
   UserNotification,
 } from "./types";
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 console.log(PORT);
 
 const httpServer = createServer();

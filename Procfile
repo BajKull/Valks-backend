@@ -1,2 +1,2 @@
-web: PORT=$PORT npm start
+web: npm start
 worker: npm start
