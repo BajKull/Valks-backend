@@ -1,6 +1,8 @@
 const path = require("path");
 const webpack = require("webpack");
 
+console.log(process.env.PORT, "config");
+
 module.exports = {
   entry: "./index.ts",
   mode: "production",
